@@ -26,6 +26,7 @@
 #include "modem_interface.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -551,7 +552,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	  query_net_status(data_buf);
 	  set_apn_func(data_buf);
 	  check_operator_selection(data_buf);
-	  open_socket(data_buf);
+	  open_socket(data_buf, SOCKET_ID);
+	  close_socket(data_buf, SOCKET_ID);
   } else {
       __NOP();
   }

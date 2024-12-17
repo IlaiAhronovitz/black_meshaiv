@@ -44,54 +44,117 @@ char* apn_name = "gh";
 char* set_apn_cmd = "AT+CGDCONT=1,\x22IP\x22,\x22gh\x22\r\n";
 
 char* open_socket_cmd = "AT+QIOPEN=1,1,\x22UDP\x22,\x22 8.1.14.252\x22,5000\r\n";
+char* close_socket_cmd = "AT+QICLOSE=1\r\n";
 char* send_data_cmd = "at+qisend=1\r\n";
 char send_data_terminator = '\x1A';
 
 char* at_cmd_response;
 
-AT_CMD get_imei, get_modem_version, check_sim_presence, force_lte, query_net_stat, set_apn, activate_pdp_context_AT, deactivate_pdp_context_AT, check_operator_AT, open_socket_AT, send_data_AT;
+AT_CMD get_imei_AT, get_modem_version, check_sim_presence, force_lte, query_net_stat, set_apn, activate_pdp_context_AT, deactivate_pdp_context_AT, check_operator_AT, open_socket_AT, close_socket_AT, send_data_AT;
 
+uint8_t SET_AT_cmd(AT_CMD* cmd, int delay, char* cmd_str)
+{
+	cmd->delay = DELAY_300_MS;
+	cmd->execution_cmd = malloc(strlen(cmd_str) + 1);
+	strcpy(cmd->execution_cmd, cmd_str);
 
-uint8_t send_AT_cmd(AT_CMD cmd)
+	return OK_CODE;
+}
+
+uint8_t send_AT_cmd(AT_CMD* cmd, bool free_flag)
 {
 	while(huart1.gState != HAL_UART_STATE_READY){}
- 	HAL_UART_Transmit_IT(&huart1, (uint8_t*)(cmd.execution_cmd), strlen(cmd.execution_cmd));
+ 	HAL_UART_Transmit_IT(&huart1, (uint8_t*)(cmd->execution_cmd), strlen(cmd->execution_cmd));
  	while(huart1.RxState != HAL_UART_STATE_READY){}
 	HAL_UARTEx_ReceiveToIdle_IT(&huart1, usart1_rx_buffer, USART1_RX_BUFFER_SIZE);
+	if(free_flag)
+	{
+		free(cmd->execution_cmd);
+	}
 	return OK_CODE;
+}
+
+uint8_t recieve_data_from_usb(char* recieve_buffer)
+{
+	recieve_buffer = malloc(sizeof(usart1_rx_buffer) + 1);
+	strcpy(recieve_buffer, (char*)usart1_rx_buffer);
+	clear_uart_rx_buffer();
+	return OK_CODE;
+}
+
+uint8_t send_data_to_usb(char* data)
+{
+	usb_tx_buffer = malloc(strlen(data) + 1);
+	strcpy((char*)usb_tx_buffer, data);
+	uint8_t bytes_sent = CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
+	free(usb_tx_buffer);
+	return bytes_sent;
+}
+
+char* get_imei(char* ans)
+{
+	get_imei_AT.delay = DELAY_300_MS;
+	get_imei_AT.execution_cmd = malloc(strlen(get_Imei_cmd) + 1);
+
+	strcpy(get_imei_AT.execution_cmd, get_Imei_cmd);
+	send_AT_cmd(&get_imei_AT, false);
+
+	get_imei_AT.response = malloc(sizeof(usart1_rx_buffer) + 1);
+	strcpy(get_imei_AT.response, (char*)usart1_rx_buffer);
+	clear_uart_rx_buffer();
+
+	send_data_to_usb(get_imei_AT.response);
+	return ans;
+}
+
+char* get_fw_version(char* ans)
+{
+	get_modem_version.delay = DELAY_300_MS;
+	get_modem_version.execution_cmd = malloc(strlen(get_modem_version_cmd) + 1);
+	strcpy(get_modem_version.execution_cmd, get_modem_version_cmd);
+
+	send_AT_cmd(&get_modem_version, false);
+	free(get_modem_version.execution_cmd);
+
+	get_modem_version.response = malloc(sizeof(usart1_rx_buffer) + 1);
+	strcpy(get_modem_version.response, (char*)usart1_rx_buffer);
+	clear_uart_rx_buffer();
+
+	send_data_to_usb(get_modem_version.response);
+	return ans;
 }
 
 char* get_modem_data(char* data)
 {
-	get_imei.delay = DELAY_300_MS;
-	get_imei.execution_cmd = malloc(strlen(get_Imei_cmd) + 1);
-	strcpy(get_imei.execution_cmd, get_Imei_cmd);
+	get_imei_AT.delay = DELAY_300_MS;
+	get_imei_AT.execution_cmd = malloc(strlen(get_Imei_cmd) + 1);
+	strcpy(get_imei_AT.execution_cmd, get_Imei_cmd);
 
 	get_modem_version.delay = DELAY_300_MS;
 	get_modem_version.execution_cmd = malloc(strlen(get_Imei_cmd) + 1);
 	strcpy(get_modem_version.execution_cmd, get_modem_version_cmd);
 
 	// Send AT commands and store responses
-	send_AT_cmd(get_modem_version);
+	send_AT_cmd(&get_modem_version, false);
 	free(get_modem_version.execution_cmd);
 
 	get_modem_version.response = malloc(strlen((char*)usart1_rx_buffer) + 1);
 	strcpy(get_modem_version.response, (char*)usart1_rx_buffer);
 	clear_uart_rx_buffer();
 
-	send_AT_cmd(get_imei);
-	free(get_imei.response);
+	send_AT_cmd(&get_imei_AT, false);
+	free(get_imei_AT.execution_cmd);
 
-	get_imei.response = malloc(strlen((char*)usart1_rx_buffer) + 1);
-	strcpy(get_imei.response, (char*)usart1_rx_buffer);
+	get_imei_AT.response = malloc(strlen((char*)usart1_rx_buffer) + 1);
+	strcpy(get_imei_AT.response, (char*)usart1_rx_buffer);
 	clear_uart_rx_buffer();
 
 	// Create a usb_rx_buffer for the final concatenated response
-    char* concatenated = malloc(strlen(get_imei.response) + strlen(get_modem_version.response) + 1);
+    char* concatenated = malloc(strlen(get_imei_AT.response) + strlen(get_modem_version.response) + 1);
 
 
 	// Concatenate responses into the final string
-    strcpy(concatenated, get_imei.response);
+    strcpy(concatenated, get_imei_AT.response);
 
     // Concatenate the second string
     strcat(concatenated, get_modem_version.response);
@@ -101,18 +164,35 @@ char* get_modem_data(char* data)
 	strcpy((char*)usb_tx_buffer, concatenated);
 	free(concatenated);
 	free(get_modem_version.response);
-	free(get_imei.response);
+	free(get_imei_AT.response);
 
     char imei[16] = {0};
     char fw_version[20] = {0};
 
     // Parse the response
     modem_info_parser((char*)usb_tx_buffer, imei, sizeof(imei), fw_version, sizeof(fw_version));
-    snprintf((char*)usb_tx_buffer, 60, "Imei is: %s, fw version: %s\r\n", imei, fw_version);
-	// transfer to user via usb
+    snprintf((char*)usb_tx_buffer, 70, "Modem data: Imei: %s, fw_version:%s\r\n", imei, fw_version);
+
 	CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
 	free(usb_tx_buffer);
 	return data;
+}
+
+char* get_sim_presence(char* ans)
+{
+	check_sim_presence.delay = DELAY_5_S;
+	check_sim_presence.execution_cmd = malloc(strlen(check_sim_presence_cmd) + 1);
+	strcpy(check_sim_presence.execution_cmd, check_sim_presence_cmd);
+
+	send_AT_cmd(&check_sim_presence, false);
+	free(check_sim_presence.execution_cmd);
+
+	check_sim_presence.response = malloc(sizeof(usart1_rx_buffer) + 1);
+	strcpy(check_sim_presence.response, (char*)usart1_rx_buffer);
+	clear_uart_rx_buffer();
+
+	send_data_to_usb(check_sim_presence.response);
+	return ans;
 }
 
 char* get_sim_data(char* data)
@@ -124,7 +204,8 @@ char* get_sim_data(char* data)
 
 
 	// Send AT commands and store responses
-	send_AT_cmd(check_sim_presence);
+	send_AT_cmd(&check_sim_presence,false);
+	free(check_sim_presence.execution_cmd);
 	check_sim_presence.response = malloc(strlen((char*)usart1_rx_buffer) + 1);
 	strcpy(check_sim_presence.response, (char*)usart1_rx_buffer);
 	clear_uart_rx_buffer();
@@ -148,13 +229,13 @@ char* get_sim_data(char* data)
 		get_iccid.execution_cmd = malloc(strlen(get_Iccid_cmd) + 1);
 		strcpy(get_iccid.execution_cmd, get_Iccid_cmd);
 
-		send_AT_cmd(get_imsi);
+		send_AT_cmd(&get_imsi, false);
 		free(get_imsi.execution_cmd);
 		get_imsi.response = malloc(strlen((char*)usart1_rx_buffer) + 1);
 		strcpy(get_imsi.response, (char*)usart1_rx_buffer);
 		clear_uart_rx_buffer();
 
-		send_AT_cmd(get_iccid);
+		send_AT_cmd(&get_iccid, false);
 		free(get_iccid.execution_cmd);
 		get_iccid.response = malloc(strlen((char*)usart1_rx_buffer) + 1);
 		strcpy(get_iccid.response, (char*)usart1_rx_buffer);
@@ -181,15 +262,15 @@ char* get_sim_data(char* data)
 		sim_info_parser(concatenated, iccid, 22, imsi, 16);
 		free(concatenated);
 		// Parse the response
-		usb_tx_buffer = malloc(140);
-		snprintf((char*)usb_tx_buffer, 142, "Sim status: %s\r\nImsi is: %s, iccid: %s\r\n", sim_stat.sim_message, imsi, iccid);
+		usb_tx_buffer = malloc(100);
+		snprintf((char*)usb_tx_buffer, 100, "Sim status: %s\r\nImsi: %s, iccid:%s\r\n", sim_stat.sim_message, imsi, iccid);
 		free(imsi);
 		free(iccid);
 	}
 	free(sim_stat.sim_message);
 	// transfer to user via usb
 	CDC_Transmit_FS((uint8_t*)usb_tx_buffer, strlen((char*)usb_tx_buffer));
-	free(usb_rx_buffer);
+	free(usb_tx_buffer);
 	return data;
 }
 
@@ -199,19 +280,18 @@ char* force_lte_scan(char* data)
 	force_lte.execution_cmd = malloc(strlen(force_lte_cmd) + 1);
 	strcpy(force_lte.execution_cmd, force_lte_cmd);
 
-	send_AT_cmd(force_lte);
+	send_AT_cmd(&force_lte, false);
 	free(force_lte.execution_cmd);
 
 	force_lte.response = malloc(sizeof(usart1_rx_buffer) + 1);
 	strcpy(force_lte.response, (char*)usart1_rx_buffer);
 	clear_uart_rx_buffer();
 
-
-	usb_tx_buffer = malloc(strlen(force_lte.response));
-	strcpy((char*)usb_tx_buffer, force_lte.response);
+	char* output_msg = data;
+	parse_lte_force_response(force_lte.response, output_msg);
 	free(force_lte.response);
-	CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
-	free(usb_tx_buffer);
+
+	send_data_to_usb(output_msg);
 	return data;
 
 }
@@ -222,19 +302,14 @@ char* activate_pdp_context(char* data)
 	activate_pdp_context_AT.execution_cmd = malloc(strlen(activate_pdp_context_cmd) + 1);
 	strcpy(activate_pdp_context_AT.execution_cmd, activate_pdp_context_cmd);
 
-	send_AT_cmd(activate_pdp_context_AT);
+	send_AT_cmd(&activate_pdp_context_AT, false);
 	free(activate_pdp_context_AT.execution_cmd);
 
 	activate_pdp_context_AT.response = malloc(sizeof(usart1_rx_buffer) + 1);
 	strcpy(activate_pdp_context_AT.response, (char*)usart1_rx_buffer);
 	clear_uart_rx_buffer();
 
-
-	usb_tx_buffer = malloc(strlen(activate_pdp_context_AT.response));
-	strcpy((char*)usb_tx_buffer, activate_pdp_context_AT.response);
-	free(activate_pdp_context_AT.response);
-	CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
-	free(usb_tx_buffer);
+	send_data_to_usb(activate_pdp_context_AT.response);
 	return data;
 }
 
@@ -244,19 +319,14 @@ char* deactivate_pdp_context(char* data)
 	deactivate_pdp_context_AT.execution_cmd = malloc(strlen(deactivate_pdp_context_cmd) + 1);
 	strcpy(deactivate_pdp_context_AT.execution_cmd, deactivate_pdp_context_cmd);
 
-	send_AT_cmd(deactivate_pdp_context_AT);
+	send_AT_cmd(&deactivate_pdp_context_AT, false);
 	free(deactivate_pdp_context_AT.execution_cmd);
 
 	deactivate_pdp_context_AT.response = malloc(sizeof(usart1_rx_buffer) + 1);
 	strcpy(deactivate_pdp_context_AT.response, (char*)usart1_rx_buffer);
 	clear_uart_rx_buffer();
 
-
-	usb_tx_buffer = malloc(strlen(deactivate_pdp_context_AT.response));
-	strcpy((char*)usb_tx_buffer, deactivate_pdp_context_AT.response);
-	free(deactivate_pdp_context_AT.response);
-	CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
-	free(usb_tx_buffer);
+	send_data_to_usb(deactivate_pdp_context_AT.response);
 	return data;
 }
 
@@ -266,7 +336,7 @@ char* check_operator_selection(char* data)
 	check_operator_AT.execution_cmd = malloc(strlen(check_operator_cmd) + 1);
 	strcpy(check_operator_AT.execution_cmd, check_operator_cmd);
 
-	send_AT_cmd(check_operator_AT);
+	send_AT_cmd(&check_operator_AT, false);
 	free(check_operator_AT.execution_cmd);
 
 	check_operator_AT.response = malloc(sizeof(usart1_rx_buffer) + 1);
@@ -275,12 +345,9 @@ char* check_operator_selection(char* data)
 
 	char* output_msg = data;
 	get_operator_parse_response(check_operator_AT.response, output_msg);
-
 	free(check_operator_AT.response);
-	usb_tx_buffer = malloc(strlen(output_msg));
-	strcpy((char*)usb_tx_buffer, output_msg);
-	CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
-	free(usb_tx_buffer);
+
+	send_data_to_usb(output_msg);
 	return data;
 }
 
@@ -290,28 +357,24 @@ char* set_apn_func(char* data)
 	set_apn.execution_cmd = malloc(strlen(set_apn_cmd) + 1);
 	strcpy(set_apn.execution_cmd, set_apn_cmd);
 
-	send_AT_cmd(set_apn);
+	send_AT_cmd(&set_apn, false);
 	free(set_apn.execution_cmd);
 
 	set_apn.response = malloc(sizeof(usart1_rx_buffer) + 1);
 	strcpy(set_apn.response, (char*)usart1_rx_buffer);
 	clear_uart_rx_buffer();
 
-	usb_tx_buffer = malloc(strlen(set_apn.response));
-	strcpy((char*)usb_tx_buffer, set_apn.response);
-	free(set_apn.response);
-	CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
-	free(usb_tx_buffer);
+	send_data_to_usb(set_apn.response);
 	return data;
 }
 
-char* open_socket(char* data)
+char* open_socket(char* data, uint8_t socket_id)
 {
 	open_socket_AT.delay = DELAY_150_S;
 	open_socket_AT.execution_cmd = malloc(strlen(open_socket_cmd) + 1);
 	strcpy(open_socket_AT.execution_cmd, open_socket_cmd);
 
-	send_AT_cmd(open_socket_AT);
+	send_AT_cmd(&open_socket_AT, false);
 	free(open_socket_AT.execution_cmd);
 
 	open_socket_AT.response = malloc(sizeof(usart1_rx_buffer) + 1);
@@ -319,13 +382,31 @@ char* open_socket(char* data)
 	clear_uart_rx_buffer();
 
 	char* output_msg = data;
-	parse_open_socket_response(open_socket_AT.response, output_msg);
+	parse_open_socket_response(open_socket_AT.response, output_msg, socket_id);
 	free(open_socket_AT.response);
 
-	usb_tx_buffer = malloc(strlen(output_msg));
-	strcpy((char*)usb_tx_buffer, output_msg);
-	CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
-	free(usb_tx_buffer);
+	send_data_to_usb(output_msg);
+	return data;
+}
+
+char* close_socket(char* data, uint8_t socket_id)
+{
+	close_socket_AT.delay = DELAY_10_S;
+	close_socket_AT.execution_cmd = malloc(strlen(close_socket_cmd) + 1);
+	strcpy(close_socket_AT.execution_cmd, close_socket_cmd);
+
+	send_AT_cmd(&close_socket_AT, false);
+	free(close_socket_AT.execution_cmd);
+
+	close_socket_AT.response = malloc(sizeof(usart1_rx_buffer) + 1);
+	strcpy(close_socket_AT.response, (char*)usart1_rx_buffer);
+	clear_uart_rx_buffer();
+
+	char* output_msg = data;
+	parse_close_socket_response(close_socket_AT.response, output_msg, socket_id);
+	free(close_socket_AT.response);
+
+	send_data_to_usb(output_msg);
 	return data;
 }
 
@@ -335,18 +416,14 @@ char* send_data(char* data)
 	send_data_AT.execution_cmd = malloc(strlen(send_data_cmd) + 1);
 	strcpy(send_data_AT.execution_cmd, send_data_cmd);
 
-	send_AT_cmd(send_data_AT);
+	send_AT_cmd(&send_data_AT, false);
 	free(send_data_AT.execution_cmd);
 
 	send_data_AT.response = malloc(sizeof(usart1_rx_buffer) + 1);
 	strcpy(send_data_AT.response, (char*)usart1_rx_buffer);
 	clear_uart_rx_buffer();
 
-	usb_tx_buffer = malloc(strlen(open_socket_AT.response));
-	strcpy((char*)usb_tx_buffer, open_socket_AT.response);
-	free(send_data_AT.response);
-	CDC_Transmit_FS(usb_tx_buffer, strlen((char*)usb_tx_buffer));
-	free(usb_tx_buffer);
+	send_data_to_usb(open_socket_AT.response);
 	return data;
 }
 
@@ -361,8 +438,9 @@ char* query_net_status(char* stat)
 {
 	query_net_stat.delay = DELAY_300_MS;
 	query_net_stat.execution_cmd = malloc(strlen(query_net_stat_cmd) + 1);
+
 	strcpy(query_net_stat.execution_cmd, query_net_stat_cmd);
-	send_AT_cmd(query_net_stat);
+	send_AT_cmd(&query_net_stat, false);
 	free(query_net_stat.execution_cmd);
 
 	query_net_stat.response = malloc(sizeof(usart1_rx_buffer) + 1);
@@ -373,6 +451,7 @@ char* query_net_status(char* stat)
 	getNetworkRegistrationStatusDescription(query_net_stat.response, &net_stat);
 	free(query_net_stat.response);
 
+//	send_data_to_usb(net_stat.net_registration_stat_verbose);
 	usb_tx_buffer = malloc(strlen(net_stat.net_registration_stat_verbose) + 1);
 	strcpy((char*)usb_tx_buffer, net_stat.net_registration_stat_verbose);
 	free(net_stat.net_registration_stat_verbose);
@@ -604,7 +683,7 @@ int get_operator_parse_response(const char* response, char* output_message) {
     return 0; // Success
 }
 
-int parse_open_socket_response(const char* response, char* output_msg) {
+int parse_open_socket_response(const char* response, char* output_msg, uint8_t socket_id) {
     const char* prefix = "+QIOPEN: ";
     char* start = strstr(response, prefix);
     if (!start) {
@@ -622,13 +701,37 @@ int parse_open_socket_response(const char* response, char* output_msg) {
 
     // Generate the appropriate message
     if (socket_status == 0) {
-        strcpy(output_msg, "Socket is open successfully\r\n");
+        snprintf(output_msg, 38, "Socket ID %d is open successfully\r\n", socket_id);
     } else {
-        sprintf(output_msg, "	Open Socket failed with error code %d\r\n", socket_status);
+    	snprintf(output_msg, 49, "Open Socket ID %d failed with error code %d\r\n", socket_id, socket_status);
     }
 
     return 0; // Success
 }
+
+int parse_close_socket_response(const char* response, char* output_buffer, uint8_t socket_id) {
+    if (strstr(response, "OK") != NULL) {
+        snprintf(output_buffer, 38, "Socket ID %d closed successfully\r\n", socket_id);
+        return 0;
+    } else {
+        snprintf(output_buffer, 30, "Error closing socket %d\r\n", socket_id);
+        return -1;
+    }
+}
+
+int parse_lte_force_response(const char *response, char *output_msg) {
+    // Check if "OK" is in the response
+    if (strstr(response, "OK") != NULL) {
+        // If "OK" is found, save the success message
+        strcpy(output_msg, "configured rat to lte\r\n");
+        return 0;
+    } else {
+        strcpy(output_msg, "error configure rat to lte\r\n");
+        return -1;
+    }
+}
+
+
 
 
 

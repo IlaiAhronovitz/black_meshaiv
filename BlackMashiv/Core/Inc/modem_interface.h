@@ -8,11 +8,16 @@
 #ifndef INC_MODEM_INTERFACE_H_
 #define INC_MODEM_INTERFACE_H_
 
+#include "main.h"
+#include <string.h>
+#include <stdbool.h>
+
 #define ONE_S_DELAY 1000
 #define DELAY_300_MS 300
 #define DELAY_5_S (5 * ONE_S_DELAY)
 #define DELAY_1_5_S (1.5 * ONE_S_DELAY)
 #define DELAY_1_8_S (1.8 * ONE_S_DELAY)
+#define DELAY_10_S (10 * ONE_S_DELAY)
 #define DELAY_150_S (150 * ONE_S_DELAY)
 #define PDP_SETTING_CMD_STATIC_LENGTH 20
 #define MAX_APN_LENGTH 5
@@ -20,8 +25,9 @@
 #define SIM_READY 0
 #define SIM_NOT_READY -1
 
-#include "main.h"
-#include <string.h>
+#define SOCKET_ID 1
+
+#define FREE_FLAG 1
 
 extern UART_HandleTypeDef huart1;
 
@@ -98,28 +104,42 @@ typedef enum {
 //AT_CMD get_imei = {"AT+GSN\r\n", DELAY_300_MS, temp_buf };
 //AT_CMD get_modem_version = { "AT+GMR\r\n", DELAY_300_MS, temp_buf2 };
 
-uint8_t send_AT_cmd(AT_CMD cmd);
+uint8_t send_AT_cmd(AT_CMD* cmd, bool free_flag);
+uint8_t SET_AT_cmd(AT_CMD* cmd, int delay, char* cmd_str);
 
+char* get_imei(char* ans);
+char* get_fw_version(char* ans);
+char* get_imsi(char* ans);
+char* get_iccid(char* ans);
 char* get_modem_data(char* data);
 char* get_sim_data(char* data);
 char* get_pdp_data(uint8_t pdp_id, char* data);
 char* query_net_status(char* stat);
 char* query_net_data(char* data);
 char* set_apn_func(char* data);
-void modem_info_parser(const char* response, char* imei, size_t imei_size, char* fw_version, size_t fw_size);
-void sim_info_parser(const char* response, char* iccid, size_t iccid_size, char* imsi, size_t imsi_size);
+
 uint8_t checkSimStatus(const char *response, SIMStatus *status);
 char* force_lte_scan(char* data);
 uint8_t getNetworkRegistrationStatusDescription(const char* response, NetRegistrationStat* net_stat);
+
+void modem_info_parser(const char* response, char* imei, size_t imei_size, char* fw_version, size_t fw_size);
+void sim_info_parser(const char* response, char* iccid, size_t iccid_size, char* imsi, size_t imsi_size);
 int get_operator_parse_response(const char* response, char* output_message);
-int parse_open_socket_response(const char* response, char* output_msg);
+int parse_open_socket_response(const char* response, char* output_msg, uint8_t socket_id);
+int parse_close_socket_response(const char* response, char* output_buffer, uint8_t socket_id);
+int parse_lte_force_response(const char *response, char *output_msg);
+
 char* activate_pdp_context(char* data);
 char* deactivate_pdp_context(char* data);
+
 char* check_operator_selection(char* data);
-char* open_socket(char* data);
+
+char* open_socket(char* data, uint8_t socket_id);
+char* close_socket(char* data, uint8_t socket_id);
 
 void clear_uart_rx_buffer(void);
 void build_pdp_command(PDPSettings* pdp_struct);
+
 uint8_t send_data_to_usb(char* data);
 uint8_t recieve_data_from_usb(char* recieve_buffer);
 
